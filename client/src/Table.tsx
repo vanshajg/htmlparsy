@@ -7,8 +7,9 @@ import {
     Th,
     Td,
 } from "@chakra-ui/react"
+import { ApiInterface } from "./api_interface";
 
-export const TableData = (props: any) => {
+export const TableData = (props: ApiInterface) => {
     const { html_version, title, h1_count, h2_count, h3_count, h4_count,
         h5_count, h6_count, internal_links_count, external_links_count,
         inaccessible_links_count, has_login_form } = props;

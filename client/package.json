@@ -1,7 +1,7 @@
 {
-  "name": "client",
+  "name": "htmlparsy_client",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "dependencies": {
     "@chakra-ui/react": "^1.6.1",
     "@emotion/react": "^11",
@@ -26,7 +26,6 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
