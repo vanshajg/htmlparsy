@@ -13,7 +13,7 @@ func main() {
 	r := gin.Default()
 	// serving client build files
 	r.Use(static.Serve("/", static.LocalFile("./web", true)))
-	apiCache := cache.New(5*time.Minute, 10*time.Minute)
+	apiCache := cache.New(6*time.Hour, 7*time.Hour)
 	api := r.Group("/api")
 	api.GET("/data", CacheCheck(apiCache), getData)
 
