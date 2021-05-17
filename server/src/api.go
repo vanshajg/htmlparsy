@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -58,7 +59,7 @@ func parseHtml(doc *html.Node, host string) (parsedData htmlParseResponse) {
 
 			switch node.Data {
 			case "html":
-				//fmt.Println("####", node)
+				fmt.Println("####", node)
 			case "h1":
 				parsedData.H1Count++
 			case "h2":
@@ -94,7 +95,15 @@ func parseHtml(doc *html.Node, host string) (parsedData htmlParseResponse) {
 				parsedData.Title = node.Data
 			}
 		} else if node.Type == html.DoctypeNode {
-			//fmt.Println(node.Data, node.Type, node.Attr)
+			for _, at := range node.Attr {
+				switch at.Key {
+				case "public":
+					fallthrough
+				case "system":
+					parsedData.HtmlVersion += at.Val + " "
+				}
+			}
+			parsedData.HtmlVersion = strings.TrimSpace(parsedData.HtmlVersion)
 		}
 		if node.Data == "input" {
 			passwordCount++
@@ -105,7 +114,12 @@ func parseHtml(doc *html.Node, host string) (parsedData htmlParseResponse) {
 		}
 	}
 	recParse(doc)
-	parsedData.InternalLinksCount, parsedData.ExternalLinksCount, parsedData.InaccessibleLinksCount = getLinksData(urls, host)
+	// default html version
+	if parsedData.HtmlVersion == "" {
+		parsedData.HtmlVersion = "HTML5"
+	}
+	parsedData.InternalLinksCount, parsedData.ExternalLinksCount,
+		parsedData.InaccessibleLinksCount = getLinksData(urls, host)
 	return
 }
 
@@ -124,28 +138,36 @@ func isFormParent(node *html.Node) bool {
 }
 
 func getLinksData(urls []string, host string) (internalLinksCount, externalLinksCount, inaccessibleLinksCount int) {
+	host = strings.TrimSuffix(host, "/")
 	hostUrl, err := url.Parse(host)
 	validUrls := []string{}
 	if err != nil {
 		return
 	}
+	fmt.Println("$", hostUrl.Host)
 
 	for _, url_string := range urls {
 		fmt.Println("#", url_string)
 		url, err := url.Parse(url_string)
 		if err != nil {
-			fmt.Println("error", err)
-			return
+			fmt.Println("error parsing url", err)
+			continue
 		}
-		if string(url_string[0]) == "/" {
-			internalLinksCount++
-			validUrls = append(validUrls, fmt.Sprintf("%s://%s%s", hostUrl.Scheme, hostUrl.Host, url_string))
-		} else if url.Host == hostUrl.Host {
-			internalLinksCount++
+		if url.Scheme == "https" || url.Scheme == "http" {
+			if url.Host == hostUrl.Host {
+				internalLinksCount++
+			} else {
+				externalLinksCount++
+			}
 			validUrls = append(validUrls, url_string)
-		} else if url.Scheme == "https" || url.Scheme == "http" { // external link
-			externalLinksCount++
-			validUrls = append(validUrls, url_string)
+		} else { // [internal link] _can_ start with / (url without protocol will be treated as internal link)
+			internalLinksCount++
+			if string(url_string[0]) == "/" {
+				validUrls = append(validUrls, fmt.Sprintf("%s://%s%s", hostUrl.Scheme, hostUrl.Host, url_string))
+			} else {
+				validUrls = append(validUrls, fmt.Sprintf("%s://%s/%s", hostUrl.Scheme, hostUrl.Host, url_string))
+			}
+
 		}
 	}
 	inaccessibleLinksCount = checkUrls(validUrls)
@@ -153,9 +175,9 @@ func getLinksData(urls []string, host string) (internalLinksCount, externalLinks
 }
 
 func checkUrls(urls []string) (inaccessableLinkCount int) {
+	fmt.Println(urls)
 	c := make(chan bool)
 	var wg sync.WaitGroup
-	fmt.Println("check ", (len(urls)))
 	for _, url := range urls {
 		wg.Add(1)
 		go checkUrl(url, c, &wg)
@@ -175,8 +197,10 @@ func checkUrls(urls []string) (inaccessableLinkCount int) {
 
 func checkUrl(url string, c chan bool, wg *sync.WaitGroup) {
 	defer wg.Done()
-	_, err := http.Head(url)
-	if err != nil {
+	res, err := http.Head(url)
+	// should use 3XX status too ?
+	if err != nil || !(res.StatusCode >= 200 && res.StatusCode < 400) {
+		fmt.Println("failed", url)
 		c <- false
 	} else {
 		c <- true
