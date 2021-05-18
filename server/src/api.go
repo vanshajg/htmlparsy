@@ -26,18 +26,35 @@ type htmlParseResponse struct {
 	HasLoginForm           bool   `json:"has_login_form"`
 }
 
+func escapeUrl(url_string string) (string, error) {
+	url_string = strings.Trim(url_string, " ")
+	URL, err := url.Parse(url_string)
+	if err != nil {
+		return "", err
+	}
+	q := URL.Query()
+	URL.RawQuery = q.Encode()
+	return URL.String(), nil
+}
+
 func getData(c *gin.Context) {
-	url := c.Query("url")
-	res, err := http.Get(url)
+	url_string := c.Query("url")
+	URL, err := escapeUrl(url_string)
 	if err != nil {
 		fmt.Println("error", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	res, err := http.Get(URL)
+	if err != nil {
+		fmt.Println("error", err)
+		c.String(http.StatusBadRequest, fmt.Sprintf("error: %s", err))
+		return
+	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
 		fmt.Printf("status code err %d", res.StatusCode)
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.String(http.StatusBadRequest, fmt.Sprintf("error: %s", err))
 		return
 	}
 	doc, err := html.Parse(res.Body)
@@ -46,7 +63,7 @@ func getData(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
-	data := parseHtml(doc, url)
+	data := parseHtml(doc, url_string)
 	c.JSON(http.StatusOK, data)
 }
 
@@ -59,7 +76,6 @@ func parseHtml(doc *html.Node, host string) (parsedData htmlParseResponse) {
 
 			switch node.Data {
 			case "html":
-				fmt.Println("####", node)
 			case "h1":
 				parsedData.H1Count++
 			case "h2":
@@ -144,38 +160,45 @@ func getLinksData(urls []string, host string) (internalLinksCount, externalLinks
 	if err != nil {
 		return
 	}
-	fmt.Println("$", hostUrl.Host)
 
 	for _, url_string := range urls {
-		fmt.Println("#", url_string)
 		url, err := url.Parse(url_string)
 		if err != nil {
 			fmt.Println("error parsing url", err)
 			continue
+		} else if len(url_string) == 0 {
+			inaccessibleLinksCount++
+			continue
 		}
-		if url.Scheme == "https" || url.Scheme == "http" {
-			if url.Host == hostUrl.Host {
-				internalLinksCount++
-			} else {
-				externalLinksCount++
-			}
-			validUrls = append(validUrls, url_string)
-		} else { // [internal link] _can_ start with / (url without protocol will be treated as internal link)
+		//	fmt.Println(url_string, "HOST: ", url.Host, "URL_STRING_LEN: ", len(url_string))
+		// subdomain urls are treated as external [https://stackoverflow.com/a/58289351]
+		if url.Host == "" { // can start with / or letter
 			internalLinksCount++
 			if string(url_string[0]) == "/" {
-				validUrls = append(validUrls, fmt.Sprintf("%s://%s%s", hostUrl.Scheme, hostUrl.Host, url_string))
+				url_string = fmt.Sprintf("%s://%s%s", hostUrl.Scheme, hostUrl.Host, url_string)
 			} else {
-				validUrls = append(validUrls, fmt.Sprintf("%s://%s/%s", hostUrl.Scheme, hostUrl.Host, url_string))
+				url_string = fmt.Sprintf("%s://%s/%s", hostUrl.Scheme, hostUrl.Host, url_string)
 			}
-
+		} else if hostUrl.Host == url.Host {
+			internalLinksCount++
+		} else {
+			externalLinksCount++
+			if url.Scheme == "" { //example : //twitter.com/vanshajgirotra
+				url_string = fmt.Sprintf("%s:%s", hostUrl.Scheme, url_string)
+			}
 		}
+		url_string, err := escapeUrl(url_string)
+		if err != nil {
+			inaccessibleLinksCount++
+			continue
+		}
+		validUrls = append(validUrls, url_string)
 	}
 	inaccessibleLinksCount = checkUrls(validUrls)
 	return
 }
 
 func checkUrls(urls []string) (inaccessableLinkCount int) {
-	fmt.Println(urls)
 	c := make(chan bool)
 	var wg sync.WaitGroup
 	for _, url := range urls {
@@ -200,7 +223,6 @@ func checkUrl(url string, c chan bool, wg *sync.WaitGroup) {
 	res, err := http.Head(url)
 	// should use 3XX status too ?
 	if err != nil || !(res.StatusCode >= 200 && res.StatusCode < 400) {
-		fmt.Println("failed", url)
 		c <- false
 	} else {
 		c <- true
