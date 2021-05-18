@@ -29,7 +29,7 @@ export const TableData = (props: ApiInterface) => {
         {key: "Has Login Form", val: has_login_form ? "Yes" : "No"}
     ]
     return (
-        <Table variant="striped" colorScheme="gray" width="50vw" margin="auto" mt="36px" border="1px solid gray">
+        <Table variant="striped" colorScheme="gray" width={{md:"70%"}} margin="auto" mt="36px" border="1px solid gray">
             <Thead>
                 <Tr>
                     <Th>Page Property</Th>
