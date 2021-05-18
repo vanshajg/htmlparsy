@@ -23,6 +23,7 @@ func TestCheckUrls(t *testing.T) {
 		{[]string{"abcdjasdasd"}, 1},
 		{[]string{"mailto:abcd@gmail.com"}, 1},
 		{[]string{"tel:19287129847"}, 1},
+		{[]string{"https://myaccount.google.com/"}, 0},
 		{[]string{}, 0},
 	}
 
@@ -55,8 +56,9 @@ func TestGetLinksData(t *testing.T) {
 		{[]string{}, "https://www.vanshajgirotra.com", linkdata{0, 0, 0}},
 		{[]string{"thisdoesnotexist", "https://stackoverflow.com/users/", "https://linkedin.com", "/12333", "resume", "/resume"},
 			"https://www.vanshajgirotra.com", linkdata{4, 2, 2}},
+		{[]string{"https://myaccount.google.com/", "https://mail.google.com/", "https://google.org"}, "https://google.com", linkdata{0, 3, 0}},
+		{[]string{"//twitter.com/vanshajgirotra", "https://github.com/vanshajg", "/hello.com"}, "https://www.vanshajgirotra.com", linkdata{1, 2, 1}},
 	}
-
 	for _, test := range cases {
 		fmt.Println("testing", test.urls)
 		internalLinksCount, externalLinksCount, inaccessibleLinksCount := getLinksData(test.urls, test.requestedUrl)
